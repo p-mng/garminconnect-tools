@@ -1,0 +1,4 @@
+/venv/
+/wahoo_tokens.json
+/garmin_tokenstore/
+/.env
