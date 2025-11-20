@@ -376,11 +376,11 @@ def main():
     if mode == "getWahooActivities":
         bearer = get_wahoo_bearer()
         all_activities = get_all_wahoo_activities(bearer)
-        print(all_activities)
+        print(json.dumps(all_activities))
     if mode == "getGarminActivities":
         garmin = authenticate_garmin()
         all_activities = get_all_garmin_activities(garmin)
-        print(all_activities)
+        print(json.dumps(all_activities))
     if mode == "wahooImport":
         garmin = authenticate_garmin()
         bearer = get_wahoo_bearer()
