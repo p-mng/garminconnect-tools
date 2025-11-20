@@ -319,9 +319,10 @@ def wahoo_import(garmin, bearer):
 
     for fit_file in fit_files:
         print(f"Uploading {fit_file} to Garmin")
-        response = garmin.upload_activity(fit_file)
-        if response.status_code < 200 or response.status_code > 299:
-            print(f"Failed to upload {fit_file} to Garmin: {response.text} (status {response.status_code})")
+        try:
+            response = garmin.upload_activity(fit_file)
+        except Exception as e:
+            print(f"Failed to upload {fit_file} to Garmin: {e} (status {response.status_code})")
             continue
         print(f"Uploaded {fit_file} to Garmin")
 
