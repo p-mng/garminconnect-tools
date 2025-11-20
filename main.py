@@ -372,13 +372,11 @@ def main():
         garmin_elevation_correction(garmin, all_activities)
     if mode == "getWahooBearer":
         bearer = get_wahoo_bearer()
-        if bearer:
-            print(bearer)
+        print(bearer)
     if mode == "getWahooActivities":
         bearer = get_wahoo_bearer()
-        if bearer:
-            all_activities = get_all_wahoo_activities(bearer)
-            print(all_activities)
+        all_activities = get_all_wahoo_activities(bearer)
+        print(all_activities)
     if mode == "getGarminActivities":
         garmin = authenticate_garmin()
         all_activities = get_all_garmin_activities(garmin)
@@ -386,16 +384,13 @@ def main():
     if mode == "wahooImport":
         garmin = authenticate_garmin()
         bearer = get_wahoo_bearer()
-        if bearer:
-            wahoo_import(garmin, bearer)
+        wahoo_import(garmin, bearer)
     if mode == "deleteWahooWorkouts":
         bearer = get_wahoo_bearer()
-        if bearer:
-            delete_wahoo_workouts(bearer)
+        delete_wahoo_workouts(bearer)
     if mode == "authenticateGarmin":
         garmin = authenticate_garmin()
-        if garmin:
-            print("Garmin authenticated successfully")
+        print("Garmin authenticated successfully")
 
 
 if __name__ == "__main__":
