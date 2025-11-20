@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from garminconnect import Garmin
 from getpass import getpass
 from pathlib import Path
+from typing import Any
 import dotenv
 import json
 import os
@@ -25,21 +26,21 @@ def yesno(prompt: str) -> bool:
     return True
 
 
-def load_wahoo_tokens():
+def load_wahoo_tokens() -> dict[str, str]:
     wahoo_tokens_file = os.getenv("WAHOO_TOKENS_FILE", DEFAULT_WAHOO_TOKENS_FILE)
     if not os.path.exists(wahoo_tokens_file):
-        return None
+        raise FileNotFoundError("Wahoo tokens file does not exist")
 
     with open(wahoo_tokens_file, "r") as f:
         return json.load(f)
 
 
-def save_wahoo_tokens(filename, tokens):
+def save_wahoo_tokens(filename: str, tokens: dict[str, str]) -> None:
     with open(filename, "w") as f:
         json.dump(tokens, f, indent=2)
 
 
-def is_wahoo_token_expired(tokens):
+def is_wahoo_token_expired(tokens: dict[str, str]) -> bool:
     if not tokens or "expires_at" not in tokens:
         return True
 
@@ -47,13 +48,12 @@ def is_wahoo_token_expired(tokens):
     return datetime.now() + timedelta(minutes=5) >= expires_at
 
 
-def refresh_wahoo_tokens(refresh_token):
+def refresh_wahoo_tokens(refresh_token: str) -> dict[str, str]:
     client_id = os.getenv("WAHOO_CLIENT_ID")
     client_secret = os.getenv("WAHOO_CLIENT_SECRET")
 
     if not client_id or not client_secret:
-        print("Wahoo client ID and client secret are required")
-        return None
+        raise Exception("Wahoo client ID and client secret are required")
 
     url = f"{WAHOO_BASE_URL}/oauth/token"
     data = {
@@ -66,8 +66,7 @@ def refresh_wahoo_tokens(refresh_token):
     response = requests.post(url, data=data)
 
     if response.status_code != 200:
-        print(f"Failed to refresh token: {response.text} (status {response.status_code})")
-        return None
+        raise Exception(f"Failed to refresh token: {response.text} (status {response.status_code})")
 
     token_data = response.json()
     expires_at = datetime.now() + timedelta(seconds=token_data.get("expires_in", 3600 * 2))
@@ -84,14 +83,13 @@ def refresh_wahoo_tokens(refresh_token):
     return tokens
 
 
-def get_wahoo_code():
+def get_wahoo_code() -> str:
     client_id = os.getenv("WAHOO_CLIENT_ID")
     redirect_uri = os.getenv("WAHOO_REDIRECT_URI")
     scopes = os.getenv("WAHOO_SCOPES")
 
     if not client_id or not redirect_uri or not scopes:
-        print("Wahoo client ID, redirect URI, and scopes are required")
-        return None
+        raise Exception("Wahoo client ID, redirect URI, and scopes are required")
 
     response_type = "code"
     url = f"{WAHOO_BASE_URL}/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&scope={scopes}&response_type={response_type}"
@@ -103,7 +101,7 @@ def get_wahoo_code():
     return code
 
 
-def get_wahoo_bearer():
+def get_wahoo_bearer() -> str:
     tokens = load_wahoo_tokens()
 
     if tokens and not is_wahoo_token_expired(tokens):
@@ -126,16 +124,14 @@ def get_wahoo_bearer():
     client_id = os.getenv("WAHOO_CLIENT_ID")
 
     if not client_secret or not redirect_uri or not client_id:
-        print("Wahoo client secret, redirect URI, and client ID are required")
-        return None
+        raise Exception("Wahoo client secret, redirect URI, and client ID are required")
 
     url = f"{WAHOO_BASE_URL}/oauth/token?client_secret={client_secret}&code={code}&redirect_uri={redirect_uri}&grant_type=authorization_code&client_id={client_id}"
 
     response = requests.post(url)
 
     if response.status_code != 200:
-        print(f"Failed to get token: {response.text} (status {response.status_code})")
-        return None
+        raise Exception(f"Failed to get token: {response.text} (status {response.status_code})")
 
     token_data = response.json()
     expires_at = datetime.now() + timedelta(seconds=token_data.get("expires_in", 3600 * 2))
@@ -152,7 +148,10 @@ def get_wahoo_bearer():
     return tokens["access_token"]
 
 
-def garmin_elevation_correction(garmin, all_activities):
+def garmin_elevation_correction(
+    garmin: Garmin,
+    all_activities: list[dict[str, Any]],
+) -> None:
     elevation_corrected = [x for x in all_activities if x["elevationCorrected"] is True]
 
     if len(elevation_corrected) == 0:
@@ -178,7 +177,7 @@ def garmin_elevation_correction(garmin, all_activities):
             break
 
 
-def authenticate_garmin():
+def authenticate_garmin() -> Garmin:
     garmin_tokenstore = os.getenv("GARMIN_TOKENSTORE", DEFAULT_GARMIN_TOKENSTORE)
     tokenstore_path = Path(garmin_tokenstore).expanduser()
 
@@ -229,12 +228,16 @@ def authenticate_garmin():
     return garmin
 
 
-def get_all_garmin_activities(garmin):
+def get_all_garmin_activities(garmin: Garmin) -> list[dict[str, Any]]:
     page = 0
     all_activities = []
+
     while True:
         print(f"Downloading Garmin activities page {page + 1}")
         activities = garmin.get_activities(start=page * 20, limit=20)
+        if activities is None:
+            raise TypeError("expected activities to be a list of activities, not None")
+
         all_activities.extend(activities.copy())
 
         if len(activities) < 20:
@@ -244,10 +247,11 @@ def get_all_garmin_activities(garmin):
     return all_activities
 
 
-def get_all_wahoo_activities(bearer):
+def get_all_wahoo_activities(bearer: str) -> list[dict[str, Any]]:
     page = 1
     per_page = 100
     all_activities = []
+
     while True:
         print(f"Downloading Wahoo activities page {page}")
         url = f"{WAHOO_BASE_URL}/v1/workouts?page={page}&per_page={per_page}"
@@ -260,12 +264,12 @@ def get_all_wahoo_activities(bearer):
     return all_activities
 
 
-def gmt_to_rfc3339(gmt_time):
+def gmt_to_rfc3339(gmt_time: str) -> str:
     isoformat = datetime.strptime(gmt_time, "%Y-%m-%d %H:%M:%S").isoformat()
     return f"{isoformat}.000Z"
 
 
-def wahoo_import(garmin, bearer):
+def wahoo_import(garmin: Garmin, bearer: str) -> None:
     garmin_activities = get_all_garmin_activities(garmin)
     wahoo_activities = get_all_wahoo_activities(bearer)
 
@@ -321,15 +325,16 @@ def wahoo_import(garmin, bearer):
         print(f"Uploading {fit_file} to Garmin")
         try:
             response = garmin.upload_activity(fit_file)
+            print(f"Uploaded FIT file: {response.status_code}")
         except Exception as e:
-            print(f"Failed to upload {fit_file} to Garmin: {e} (status {response.status_code})")
+            print(f"Failed to upload {fit_file} to Garmin: {e}")
             continue
         print(f"Uploaded {fit_file} to Garmin")
 
     return
 
 
-def delete_wahoo_workouts(bearer):
+def delete_wahoo_workouts(bearer: str) -> None:
     while True:
         id = input("> ID to delete: ").strip()
         if not id:
@@ -343,7 +348,7 @@ def delete_wahoo_workouts(bearer):
         print(f"Deleted activity {id}")
 
 
-def main():
+def main() -> None:
     dotenv.load_dotenv()
 
     valid_modes = [
