@@ -247,7 +247,10 @@ def get_all_garmin_activities(garmin: Garmin) -> list[dict[str, Any]]:
     return all_activities
 
 
-def get_all_wahoo_activities(bearer: str) -> list[dict[str, Any]]:
+def get_all_wahoo_activities(
+    bearer: str,
+    ignore_workouts: bool,
+) -> list[dict[str, Any]]:
     page = 1
     per_page = 100
     all_activities = []
@@ -256,7 +259,13 @@ def get_all_wahoo_activities(bearer: str) -> list[dict[str, Any]]:
         print(f"Downloading Wahoo activities page {page}")
         url = f"{WAHOO_BASE_URL}/v1/workouts?page={page}&per_page={per_page}"
         response = requests.get(url, headers={"Authorization": f"Bearer {bearer}"})
-        all_activities.extend(response.json()["workouts"])
+
+        if ignore_workouts:
+            new = [a for a in response.json()["workouts"] if a["workout_summary"] is not None]
+            all_activities.extend(new)
+        else:
+            all_activities.extend(response.json()["workouts"])
+
         if len(response.json()["workouts"]) < per_page:
             break
         page += 1
@@ -271,7 +280,7 @@ def gmt_to_rfc3339(gmt_time: str) -> str:
 
 def wahoo_import(garmin: Garmin, bearer: str) -> None:
     garmin_activities = get_all_garmin_activities(garmin)
-    wahoo_activities = get_all_wahoo_activities(bearer)
+    wahoo_activities = get_all_wahoo_activities(bearer, True)
 
     id_time_garmin = {}
     for activity in garmin_activities:
@@ -354,7 +363,7 @@ def main() -> None:
     valid_modes = [
         "elevationCorrection",
         "getWahooBearer",
-        "getWahooActivities",
+        "getWahooActivities [--ignore-workouts]",
         "getGarminActivities",
         "wahooImport",
         "deleteWahooWorkouts",
@@ -366,10 +375,9 @@ def main() -> None:
         for mode in valid_modes:
             print(f"  {mode}")
         return
+
     mode = sys.argv[1]
-    if mode not in valid_modes:
-        print(f"Invalid mode. valid modes: {', '.join(valid_modes)}")
-        return
+    args = sys.argv[2:]
 
     if mode == "elevationCorrection":
         garmin = authenticate_garmin()
@@ -380,7 +388,12 @@ def main() -> None:
         print(bearer)
     if mode == "getWahooActivities":
         bearer = get_wahoo_bearer()
-        all_activities = get_all_wahoo_activities(bearer)
+        if "--ignore-workouts" in args:
+            ignore_workouts = True
+        else:
+            print("tip: use `--ignore-workouts` to ignore planned workouts")
+            ignore_workouts = False
+        all_activities = get_all_wahoo_activities(bearer, ignore_workouts)
         print(json.dumps(all_activities))
     if mode == "getGarminActivities":
         garmin = authenticate_garmin()
@@ -396,6 +409,8 @@ def main() -> None:
     if mode == "authenticateGarmin":
         garmin = authenticate_garmin()
         print("Garmin authenticated successfully")
+    else:
+        print("Invalid mode.")
 
 
 if __name__ == "__main__":
