@@ -26,10 +26,10 @@ def yesno(prompt: str) -> bool:
     return True
 
 
-def load_wahoo_tokens() -> dict[str, str]:
+def load_wahoo_tokens() -> dict[str, str] | None:
     wahoo_tokens_file = os.getenv("WAHOO_TOKENS_FILE", DEFAULT_WAHOO_TOKENS_FILE)
     if not os.path.exists(wahoo_tokens_file):
-        raise FileNotFoundError("Wahoo tokens file does not exist")
+        return None
 
     with open(wahoo_tokens_file, "r") as f:
         return json.load(f)
@@ -363,7 +363,7 @@ def main() -> None:
     valid_modes = [
         "elevationCorrection",
         "getWahooBearer",
-        "getWahooActivities [--ignore-workouts]",
+        "getWahooActivities",
         "getGarminActivities",
         "wahooImport",
         "deleteWahooWorkouts",
@@ -377,6 +377,11 @@ def main() -> None:
         return
 
     mode = sys.argv[1]
+
+    if mode not in valid_modes:
+        print("Invalid mode.")
+        return
+
     args = sys.argv[2:]
 
     if mode == "elevationCorrection":
@@ -409,8 +414,6 @@ def main() -> None:
     if mode == "authenticateGarmin":
         garmin = authenticate_garmin()
         print("Garmin authenticated successfully")
-    else:
-        print("Invalid mode.")
 
 
 if __name__ == "__main__":
