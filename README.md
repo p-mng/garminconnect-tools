@@ -30,3 +30,4 @@ Modes for advanced users:
 - `getWahooActivities`: Fetch and display all activities from your Wahoo account (only useful for debugging)
 - `getGarminActivities`: Fetch and display all activities from your Garmin Connect account (only useful for debugging)
 - `authenticateGarmin`: Authenticate with Garmin Connect and save tokens for future use (only useful for debugging)
+- `fitDate <filename>`: Print the start date and time of a given fit file

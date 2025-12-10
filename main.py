@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from garminconnect import Garmin
 from getpass import getpass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 import dotenv
+import fitdecode
 import json
 import os
 import re
@@ -17,6 +18,31 @@ import tempfile
 WAHOO_BASE_URL = "https://api.wahooligan.com"
 DEFAULT_GARMIN_TOKENSTORE = "garmin_tokenstore"
 DEFAULT_WAHOO_TOKENS_FILE = "wahoo_tokens.json"
+
+
+def format_timestamp(date: datetime):
+    date = date.replace(tzinfo=timezone.utc)
+    return date.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def get_fit_start_date(filename) -> str | None:
+    with fitdecode.FitReader(filename) as fit_file:
+        for frame in fit_file:
+            if not isinstance(frame, fitdecode.FitDataMessage):
+                continue
+
+            timestamp = None
+
+            if frame.name == "file_id":
+                if frame.has_field("time_created"):
+                    timestamp = frame.get_value("time_created")
+            if frame.name == "session":
+                if frame.has_field("start_time"):
+                    timestamp = frame.get_value("start_time")
+
+            if timestamp is None:
+                return None
+            return format_timestamp(cast(datetime, timestamp))
 
 
 def yesno(prompt: str) -> bool:
@@ -368,6 +394,7 @@ def main() -> None:
         "wahooImport",
         "deleteWahooWorkouts",
         "authenticateGarmin",
+        "fitDate",
     ]
 
     if len(sys.argv) < 2:
@@ -414,6 +441,13 @@ def main() -> None:
     if mode == "authenticateGarmin":
         garmin = authenticate_garmin()
         print("Garmin authenticated successfully")
+    if mode == "fitDate":
+        if len(args) != 1:
+            print("no fit file provided")
+            return
+        filename = args[0]
+        date = get_fit_start_date(filename)
+        print(date)
 
 
 if __name__ == "__main__":
