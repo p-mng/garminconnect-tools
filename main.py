@@ -9,7 +9,6 @@ import dotenv
 import fitdecode
 import json
 import os
-import re
 import requests
 import subprocess
 import sys
@@ -308,6 +307,8 @@ def wahoo_import(garmin: Garmin, bearer: str) -> None:
     garmin_activities = get_all_garmin_activities(garmin)
     wahoo_activities = get_all_wahoo_activities(bearer, True)
 
+    garmin_start_dates = [gmt_to_rfc3339(activity["startTimeGMT"]) for activity in garmin_activities]
+
     id_time_garmin = {}
     for activity in garmin_activities:
         id_time_garmin[activity["activityId"]] = gmt_to_rfc3339(activity["startTimeGMT"])
@@ -337,36 +338,33 @@ def wahoo_import(garmin: Garmin, bearer: str) -> None:
     temp_dir = tempfile.mkdtemp()
     print(f"Downloading .fit files to {temp_dir}")
 
-    fit_files = []
-
     for activity in import_activities:
         if activity["workout_summary"] is None or activity["workout_summary"]["file"] is None:
             print(f"  {activity['name']} ({activity['id']}, started at {activity['starts']}): No workout summary or file! Can't upload to Garmin")
             continue
 
         fit_url = activity["workout_summary"]["file"]["url"]
-        fit_filename = re.sub(r".*\/", "", fit_url)
+        fit_filename = os.path.basename(fit_url)
 
-        print(f"Downloading {fit_url}")
+        print(f"Importing {fit_filename} to Garmin Connect")
         fit_data = requests.get(fit_url).content
 
         path = os.path.join(temp_dir, fit_filename)
-        fit_files.append(path)
-
         with open(path, "wb") as f:
             f.write(fit_data)
 
-    for fit_file in fit_files:
-        print(f"Uploading {fit_file} to Garmin")
+        start_date = get_fit_start_date(path)
+
+        if start_date in garmin_start_dates:
+            print(f"!! This activity file appears to have already been uploaded to Garmin Connect (start date: {start_date}")
+            print("!! Skipping...")
+            continue
+
         try:
-            response = garmin.upload_activity(fit_file)
+            response = garmin.upload_activity(path)
             print(f"Uploaded FIT file: {response.status_code}")
         except Exception as e:
-            print(f"Failed to upload {fit_file} to Garmin: {e}")
-            continue
-        print(f"Uploaded {fit_file} to Garmin")
-
-    return
+            print(f"!! Failed to upload {fit_filename} to Garmin: {e}")
 
 
 def delete_wahoo_workouts(bearer: str) -> None:
