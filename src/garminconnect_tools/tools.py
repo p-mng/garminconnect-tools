@@ -381,7 +381,7 @@ def delete_wahoo_workouts(bearer: str) -> None:
         print(f"Deleted activity {id}")
 
 
-def main() -> None:
+def start() -> None:
     dotenv.load_dotenv()
 
     valid_modes = [
@@ -446,7 +446,3 @@ def main() -> None:
         filename = args[0]
         date = get_fit_start_date(filename)
         print(date)
-
-
-if __name__ == "__main__":
-    main()

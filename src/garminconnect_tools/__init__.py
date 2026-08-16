@@ -1,2 +1,9 @@
+from garminconnect_tools.tools import start
+
+
 def main() -> None:
-    print("Hello from garminconnect-tools!")
+    start()
+
+
+if __name__ == "__main__":
+    main()
