@@ -19,18 +19,11 @@ DEFAULT_GARMIN_TOKENSTORE = "garmin_tokenstore"
 DEFAULT_WAHOO_TOKENS_FILE = "wahoo_tokens.json"
 
 
-def format_timestamp(date: datetime):
-    date = date.replace(tzinfo=timezone.utc)
-    return date.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-
-
-def get_fit_start_date(filename: str) -> str | None:
+def get_fit_timestamp(filename: str) -> datetime:
     with fitdecode.FitReader(filename) as fit_file:
         for frame in fit_file:
             if not isinstance(frame, fitdecode.FitDataMessage):
                 continue
-
-            timestamp = None
 
             if frame.name == "file_id":
                 if frame.has_field("time_created"):
@@ -39,9 +32,12 @@ def get_fit_start_date(filename: str) -> str | None:
                 if frame.has_field("start_time"):
                     timestamp = frame.get_value("start_time")
 
-            if timestamp is None:
-                return None
-            return format_timestamp(cast(datetime, timestamp))
+            if not timestamp:
+                raise RuntimeError("fit file contains invalid timestamp")
+
+            return timestamp
+
+    raise RuntimeError("fit file does not contain a timestamp")
 
 
 def yesno(prompt: str) -> bool:
@@ -256,9 +252,6 @@ def get_all_garmin_activities(garmin: Garmin) -> list[dict[str, Any]]:
     while True:
         print(f"Downloading Garmin activities page {page + 1}")
         activities = garmin.get_activities(start=page * 20, limit=20)
-        if activities is None:
-            raise TypeError("expected activities to be a list of activities, not None")
-
         all_activities.extend(activities.copy())
 
         if len(activities) < 20:
@@ -294,24 +287,23 @@ def get_all_wahoo_activities(
     return all_activities
 
 
-def gmt_to_rfc3339(gmt_time: str) -> str:
-    isoformat = datetime.strptime(gmt_time, "%Y-%m-%d %H:%M:%S").isoformat()
-    return f"{isoformat}.000Z"
+def parse_gmt(gmt_time: str) -> datetime:
+    return datetime.strptime(gmt_time, "%Y-%m-%d %H:%M:%S")
 
 
 def wahoo_import(garmin: Garmin, bearer: str) -> None:
     garmin_activities = get_all_garmin_activities(garmin)
     wahoo_activities = get_all_wahoo_activities(bearer, True)
 
-    garmin_start_dates = [gmt_to_rfc3339(activity["startTimeGMT"]) for activity in garmin_activities]
+    garmin_start_dates = [parse_gmt(activity["startTimeGMT"]) for activity in garmin_activities]
 
     id_time_garmin = {}
     for activity in garmin_activities:
-        id_time_garmin[activity["activityId"]] = gmt_to_rfc3339(activity["startTimeGMT"])
+        id_time_garmin[activity["activityId"]] = parse_gmt(activity["startTimeGMT"])
 
     id_time_wahoo = {}
     for activity in wahoo_activities:
-        id_time_wahoo[activity["id"]] = activity["starts"]
+        id_time_wahoo[activity["id"]] = datetime.fromisoformat(activity["starts"])
 
     import_ids = [k for k, v in id_time_wahoo.items() if v not in id_time_garmin.values()]
     import_activities = [activity for activity in wahoo_activities if activity["id"] in import_ids]
@@ -349,18 +341,18 @@ def wahoo_import(garmin: Garmin, bearer: str) -> None:
         with open(path, "wb") as f:
             f.write(fit_data)
 
-        start_date = get_fit_start_date(path)
+        start_date = get_fit_timestamp(path)
 
         if start_date in garmin_start_dates:
-            print(f"!! This activity file appears to have already been uploaded to Garmin Connect (start date: {start_date}")
-            print("!! Skipping...")
+            print(f"This activity file appears to have already been uploaded to Garmin Connect (start date: {start_date}")
+            print("Skipping...")
             continue
 
         try:
             response = garmin.upload_activity(path)
             print(f"Uploaded FIT file: {response.status_code}")
         except Exception as e:
-            print(f"!! Failed to upload {fit_filename} to Garmin: {e}")
+            print(f"Failed to upload {fit_filename} to Garmin: {e}")
 
 
 def delete_wahoo_workouts(bearer: str) -> None:
@@ -440,5 +432,5 @@ def start() -> None:
             print("no fit file provided")
             return
         filename = args[0]
-        date = get_fit_start_date(filename)
+        date = get_fit_timestamp(filename)
         print(date)
