@@ -1,0 +1,24 @@
+[project]
+name = "garminconnect-tools"
+version = "0.1.0"
+description = "Tools for managing Garmin Connect activities and integrating with Wahoo fitness data."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "dotenv>=0.9.9",
+    "fitdecode>=0.11.0",
+    "garminconnect>=0.3.10",
+    "requests>=2.34.2",
+]
+
+[project.scripts]
+garminconnect-tools = "garminconnect_tools:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+
+[tool.black]
+line-length = 200
+target-version = ["py313"]
