@@ -24,7 +24,7 @@ def format_timestamp(date: datetime):
     return date.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-def get_fit_start_date(filename) -> str | None:
+def get_fit_start_date(filename: str) -> str | None:
     with fitdecode.FitReader(filename) as fit_file:
         for frame in fit_file:
             if not isinstance(frame, fitdecode.FitDataMessage):
@@ -120,7 +120,7 @@ def get_wahoo_code() -> str:
     url = f"{WAHOO_BASE_URL}/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&scope={scopes}&response_type={response_type}"
 
     print(f"Opening {url} in browser")
-    subprocess.run(["open", url])
+    _ = subprocess.run(["open", url])
 
     code = input("> Enter code from URL in browser: ").strip()
     return code
@@ -195,7 +195,7 @@ def garmin_elevation_correction(
         print(f"Updating elevation correction for activity {id}")
 
         url = f"/activity-service/activity/toggleElevationCorrection/{act['activityId']}"
-        response = garmin.garth.post("connectapi", url, data={"elevationCorrected": "true"})
+        response = garmin.client.post("connectapi", url, data={"elevationCorrected": "true"})
 
         if response.status_code < 200 or response.status_code > 299:
             print(f"Failed to update elevation correction for activity {id}: {response.text} (status {response.status_code})")
@@ -221,7 +221,7 @@ def authenticate_garmin() -> Garmin:
         try:
             print("Logging in with existing Garmin authentication tokens...")
             garmin = Garmin()
-            garmin.login(str(tokenstore_path))
+            _ = garmin.login(str(tokenstore_path))
             return garmin
         except Exception as e:
             print(f"Error logging in with existing Garmin authentication tokens: {e}")
@@ -240,15 +240,11 @@ def authenticate_garmin() -> Garmin:
         email=email,
         password=password,
         is_cn=False,
-        return_on_mfa=True,
+        prompt_mfa=lambda: input("Garmin MFA code: "),
     )
-    result1, result2 = garmin.login()
+    _ = garmin.login()
 
-    if result1 == "needs_mfa":
-        mfa_code = input("> Multi-factor authentication required: ").strip()
-        garmin.resume_login(result2, mfa_code)
-
-    garmin.garth.dump(str(tokenstore_path))
+    garmin.client.dump(str(tokenstore_path))
     print(f"Garmin authentication tokens saved to: {tokenstore_path}")
     return garmin
 
