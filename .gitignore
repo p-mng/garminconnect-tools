@@ -1,4 +1,6 @@
-/wahoo_tokens.json
-/garmin_tokenstore/
+__pycache__/
 /.env
+
 *.fit
+/garmin_tokenstore/
+/wahoo_tokens.json
