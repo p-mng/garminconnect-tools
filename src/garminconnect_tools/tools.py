@@ -348,8 +348,8 @@ def wahoo_import(garmin: Garmin, bearer: str) -> None:
             continue
 
         try:
-            response = garmin.upload_activity(path)
-            print(f"Uploaded FIT file: {response.status_code}")
+            garmin.upload_activity(path)
+            print(f"Uploaded FIT file: {fit_filename}")
         except Exception as e:
             print(f"Failed to upload {fit_filename} to Garmin: {e}")
 
