@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-from datetime import datetime, timedelta, timezone
-from garminconnect import Garmin
-from getpass import getpass
-from pathlib import Path
-from typing import Any, cast
-import dotenv
-import fitdecode
+import http
 import json
 import os
-import requests
 import subprocess
 import sys
 import tempfile
+from datetime import UTC, datetime, timedelta
+from getpass import getpass
+from pathlib import Path
+from typing import Any
+
+import dotenv
+import fitdecode
+import requests
+from garminconnect import Garmin
 
 WAHOO_BASE_URL = "https://api.wahooligan.com"
 DEFAULT_GARMIN_TOKENSTORE = "garmin_tokenstore"
@@ -24,12 +26,10 @@ def get_fit_timestamp(filename: str) -> datetime:
             if not isinstance(frame, fitdecode.FitDataMessage):
                 continue
 
-            if frame.name == "file_id":
-                if frame.has_field("time_created"):
-                    timestamp = frame.get_value("time_created")
-            if frame.name == "session":
-                if frame.has_field("start_time"):
-                    timestamp = frame.get_value("start_time")
+            if frame.name == "file_id" and frame.has_field("time_created"):
+                timestamp = frame.get_value("time_created")
+            if frame.name == "session" and frame.has_field("start_time"):
+                timestamp = frame.get_value("start_time")
 
             if not timestamp:
                 raise RuntimeError("fit file contains invalid timestamp")
@@ -41,9 +41,7 @@ def get_fit_timestamp(filename: str) -> datetime:
 
 def yesno(prompt: str) -> bool:
     user_input = input(f"> {prompt} [y/N] ")
-    if user_input.strip().lower() != "y":
-        return False
-    return True
+    return user_input.strip().lower() == "y"
 
 
 def load_wahoo_tokens() -> dict[str, str] | None:
@@ -64,8 +62,8 @@ def is_wahoo_token_expired(tokens: dict[str, str]) -> bool:
     if not tokens or "expires_at" not in tokens:
         return True
 
-    expires_at = datetime.fromisoformat(tokens["expires_at"])
-    return datetime.now() + timedelta(minutes=5) >= expires_at
+    expires_at = datetime.fromisoformat(tokens["expires_at"]).replace(tzinfo=UTC)
+    return datetime.now(tz=UTC) + timedelta(minutes=5) >= expires_at
 
 
 def refresh_wahoo_tokens(refresh_token: str) -> dict[str, str]:
@@ -73,7 +71,7 @@ def refresh_wahoo_tokens(refresh_token: str) -> dict[str, str]:
     client_secret = os.getenv("WAHOO_CLIENT_SECRET")
 
     if not client_id or not client_secret:
-        raise Exception("Wahoo client ID and client secret are required")
+        raise RuntimeError("Wahoo client ID and client secret are required")
 
     url = f"{WAHOO_BASE_URL}/oauth/token"
     data = {
@@ -85,11 +83,11 @@ def refresh_wahoo_tokens(refresh_token: str) -> dict[str, str]:
 
     response = requests.post(url, data=data)
 
-    if response.status_code != 200:
-        raise Exception(f"Failed to refresh token: {response.text} (status {response.status_code})")
+    if response.status_code != http.HTTPStatus.OK:
+        raise RuntimeError(f"Failed to refresh token: {response.text} (status {response.status_code})")
 
     token_data = response.json()
-    expires_at = datetime.now() + timedelta(seconds=token_data.get("expires_in", 3600 * 2))
+    expires_at = datetime.now(tz=UTC) + timedelta(seconds=token_data.get("expires_in", 3600 * 2))
 
     tokens = {
         "access_token": token_data["access_token"],
@@ -109,13 +107,13 @@ def get_wahoo_code() -> str:
     scopes = os.getenv("WAHOO_SCOPES")
 
     if not client_id or not redirect_uri or not scopes:
-        raise Exception("Wahoo client ID, redirect URI, and scopes are required")
+        raise RuntimeError("Wahoo client ID, redirect URI, and scopes are required")
 
     response_type = "code"
     url = f"{WAHOO_BASE_URL}/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&scope={scopes}&response_type={response_type}"
 
     print(f"Opening {url} in browser")
-    _ = subprocess.run(["open", url])
+    _ = subprocess.run(["/usr/bin/env", "open", url], check=False)
 
     code = input("> Enter code from URL in browser: ").strip()
     return code
@@ -144,17 +142,17 @@ def get_wahoo_bearer() -> str:
     client_id = os.getenv("WAHOO_CLIENT_ID")
 
     if not client_secret or not redirect_uri or not client_id:
-        raise Exception("Wahoo client secret, redirect URI, and client ID are required")
+        raise RuntimeError("Wahoo client secret, redirect URI, and client ID are required")
 
     url = f"{WAHOO_BASE_URL}/oauth/token?client_secret={client_secret}&code={code}&redirect_uri={redirect_uri}&grant_type=authorization_code&client_id={client_id}"
 
     response = requests.post(url)
 
-    if response.status_code != 200:
-        raise Exception(f"Failed to get token: {response.text} (status {response.status_code})")
+    if response.status_code != http.HTTPStatus.OK:
+        raise RuntimeError(f"Failed to get token: {response.text} (status {response.status_code})")
 
     token_data = response.json()
-    expires_at = datetime.now() + timedelta(seconds=token_data.get("expires_in", 3600 * 2))
+    expires_at = datetime.now(tz=UTC) + timedelta(seconds=token_data.get("expires_in", 3600 * 2))
 
     tokens = {
         "access_token": token_data["access_token"],
@@ -186,14 +184,15 @@ def garmin_elevation_correction(
         return
 
     for act in elevation_corrected:
-        id = act["activityId"]
-        print(f"Updating elevation correction for activity {id}")
+        act_id = act["activityId"]
+        print(f"Updating elevation correction for activity {act_id}")
 
-        url = f"/activity-service/activity/toggleElevationCorrection/{act['activityId']}"
+        url = f"/activity-service/activity/toggleElevationCorrection/{act_id}"
         response = garmin.client.post("connectapi", url, data={"elevationCorrected": "true"})
 
-        if response.status_code < 200 or response.status_code > 299:
-            print(f"Failed to update elevation correction for activity {id}: {response.text} (status {response.status_code})")
+        status = http.HTTPStatus(response.status_code)
+        if not status.is_success:
+            print(f"Failed to update elevation correction for activity {act_id}: {response.text} (status {response.status_code})")
             break
 
 
@@ -262,6 +261,7 @@ def get_all_garmin_activities(garmin: Garmin) -> list[dict[str, Any]]:
 
 def get_all_wahoo_activities(
     bearer: str,
+    *,
     ignore_workouts: bool,
 ) -> list[dict[str, Any]]:
     page = 1
@@ -287,12 +287,12 @@ def get_all_wahoo_activities(
 
 
 def parse_gmt(gmt_time: str) -> datetime:
-    return datetime.strptime(gmt_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    return datetime.strptime(gmt_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
 
 
 def wahoo_import(garmin: Garmin, bearer: str) -> None:
     garmin_activities = get_all_garmin_activities(garmin)
-    wahoo_activities = get_all_wahoo_activities(bearer, True)
+    wahoo_activities = get_all_wahoo_activities(bearer, ignore_workouts=True)
 
     garmin_start_dates = [parse_gmt(activity["startTimeGMT"]) for activity in garmin_activities]
 
@@ -319,7 +319,7 @@ def wahoo_import(garmin: Garmin, bearer: str) -> None:
     if skip == "":
         skip = []
     else:
-        skip = [int(id.strip()) for id in skip.split(",")]
+        skip = [int(act_id.strip()) for act_id in skip.split(",")]
         import_activities = [activity for activity in import_activities if activity["id"] not in skip]
 
     temp_dir = tempfile.mkdtemp()
@@ -362,7 +362,8 @@ def delete_wahoo_workouts(bearer: str) -> None:
 
         url = f"{WAHOO_BASE_URL}/v1/workouts/{id}"
         response = requests.delete(url, headers={"Authorization": f"Bearer {bearer}"})
-        if response.status_code < 200 or response.status_code > 299:
+        status = http.HTTPStatus(response.status_code)
+        if not status.is_success:
             print(f"Failed to delete activity {id}: {response.text} (status {response.status_code})")
             continue
         print(f"Deleted activity {id}")
@@ -410,7 +411,7 @@ def start() -> None:
         else:
             print("tip: use `--ignore-workouts` to ignore planned workouts")
             ignore_workouts = False
-        all_activities = get_all_wahoo_activities(bearer, ignore_workouts)
+        all_activities = get_all_wahoo_activities(bearer, ignore_workouts=ignore_workouts)
         print(json.dumps(all_activities))
     if mode == "getGarminActivities":
         garmin = authenticate_garmin()
