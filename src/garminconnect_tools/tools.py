@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 from datetime import datetime, timedelta, timezone
 from garminconnect import Garmin
 from getpass import getpass
@@ -288,7 +287,7 @@ def get_all_wahoo_activities(
 
 
 def parse_gmt(gmt_time: str) -> datetime:
-    return datetime.strptime(gmt_time, "%Y-%m-%d %H:%M:%S")
+    return datetime.strptime(gmt_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
 
 
 def wahoo_import(garmin: Garmin, bearer: str) -> None:
@@ -314,7 +313,7 @@ def wahoo_import(garmin: Garmin, bearer: str) -> None:
 
     print(f"Importing {len(import_activities)} activities to Garmin")
     for activity in import_activities:
-        print(f"  {activity['name']} ({activity['id']}, started at {activity['starts']})")
+        print(f"Importing activity {activity['name']} ({activity['id']}, started at {activity['starts']})")
 
     skip = input("> IDs to skip (comma separated): ").strip()
     if skip == "":
@@ -328,7 +327,7 @@ def wahoo_import(garmin: Garmin, bearer: str) -> None:
 
     for activity in import_activities:
         if activity["workout_summary"] is None or activity["workout_summary"]["file"] is None:
-            print(f"  {activity['name']} ({activity['id']}, started at {activity['starts']}): No workout summary or file! Can't upload to Garmin")
+            print(f"Activity {activity['name']} ({activity['id']}, started at {activity['starts']}): No workout summary or file! Can't upload to Garmin")
             continue
 
         fit_url = activity["workout_summary"]["file"]["url"]
