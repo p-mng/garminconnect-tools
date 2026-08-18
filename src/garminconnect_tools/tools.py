@@ -178,7 +178,7 @@ def garmin_elevation_correction(
 
     print(f"found {len(elevation_corrected)} activities with corrected elevation data:")
     for e in elevation_corrected:
-        print(f"  {e['activityId']}, {e['activityType']['typeKey']}")
+        print(f"Activity {e['activityId']}, {e['activityType']['typeKey']}")
 
     if not yesno("Disable elevation correction for all these activities?"):
         return
